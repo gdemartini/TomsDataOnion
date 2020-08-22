@@ -3,6 +3,10 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Engines;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Security;
 
 namespace TomsDataOnion
 {
@@ -35,6 +39,9 @@ namespace TomsDataOnion
       Console.WriteLine(layer);
 
       layer = layer.Peel(UnpackNetwork);
+      Console.WriteLine(layer);
+
+      layer = layer.Peel(DecryptAes);
       Console.WriteLine(layer);
 
       //Console.WriteLine(Encoding.ASCII.GetString(layer.PayloadAsBytes));
@@ -151,6 +158,31 @@ namespace TomsDataOnion
         //}
       }
       return result.ToArray();
+    }
+
+    private static byte[] DecryptAes(byte[] bytes)
+    {
+      //- First 32 bytes: The 256-bit key encrypting key (KEK).
+      var kek = bytes[0..32];
+      //- Next 8 bytes: The 64-bit initialization vector (IV) for the wrapped key.
+      var kiv = bytes[32..40];
+      //- Next 40 bytes: The wrapped (encrypted) key. When decrypted, this will become the 256-bit encryption key.
+      var wrappedKey = bytes[40..80];
+      //- Next 16 bytes: The 128-bit initialization vector (IV) for the encrypted payload.
+      var iv = bytes[80..96];
+      //- All remaining bytes: The encrypted payload.
+      var encPayload = bytes[96..];
+
+      // Unwrap key
+      var aesWrapEngine = new AesWrapEngine();
+      aesWrapEngine.Init(false, new ParametersWithIV(new KeyParameter(kek), kiv));
+      var key = aesWrapEngine.Unwrap(wrappedKey, 0, wrappedKey.Length);
+
+      // Initialize AES CTR (counter) mode cipher
+      var cipher = CipherUtilities.GetCipher("AES/CTR/NoPadding");
+      cipher.Init(false, new ParametersWithIV(new KeyParameter(key), iv));
+
+      return cipher.DoFinal(encPayload);
     }
   }
 }
