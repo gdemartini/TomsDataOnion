@@ -20,6 +20,18 @@ namespace TomsDataOnion
     private Stream Output { get; }
     private TextWriter Debug { get; }
 
+    private byte MemReg
+    {
+      get
+      {
+        return this.Mem[this.Reg32[(byte)Regs32.ptr] + this.Reg8[(byte)Regs8.c]];
+      }
+      set
+      {
+        this.Mem[this.Reg32[(byte)Regs32.ptr] + this.Reg8[(byte)Regs8.c]] = value;
+      }
+    }
+
     private Dictionary<Instructions, byte> InstructionSize = new Dictionary<Instructions, byte>
     {
       { Instructions.ADD,   1 },
@@ -58,9 +70,9 @@ namespace TomsDataOnion
 
     public TomtelEmulator(byte[] mem, Stream output, TextWriter debug = null)
     {
-      Mem = mem;
-      Output = output;
-      Debug = debug;
+      this.Mem = mem;
+      this.Output = output;
+      this.Debug = debug;
     }
 
     public void Run(uint timeoutMs = 10000)
@@ -105,7 +117,7 @@ namespace TomsDataOnion
       }
 
       if (!this.InstructionCode.ContainsKey(x))
-        throw new InvalidOperationException($"Unsupported instruction code {b:x}");
+        throw new InvalidOperationException($"Unsupported instruction code {b:X}");
 
       return this.InstructionCode[x];
     }
@@ -129,7 +141,7 @@ namespace TomsDataOnion
             Sets `a` to the sum of `a` and `b`, modulo 256.
         */
         case Instructions.ADD:
-          this.Debug?.WriteLine($"ADD # a<-{this.Reg8[(byte)Regs8.a]:x} + {this.Reg8[(byte)Regs8.b]:x} = {(byte)(this.Reg8[(byte)Regs8.a] + this.Reg8[(byte)Regs8.b]):x}");
+          this.Debug?.WriteLine($"ADD   a <- {this.Reg8[(byte)Regs8.a]:X} + {this.Reg8[(byte)Regs8.b]:X} = {(byte)(this.Reg8[(byte)Regs8.a] + this.Reg8[(byte)Regs8.b]):X}");
           this.Reg8[(byte)Regs8.a] += this.Reg8[(byte)Regs8.b];
           break;
 
@@ -143,7 +155,7 @@ namespace TomsDataOnion
             behaviour is undefined.
         */
         case Instructions.APTR:
-          this.Debug?.WriteLine($"APTR # ptr<-{this.Reg32[(byte)Regs32.ptr]:x} + {this.Mem[addr + 1]:x} = {this.Reg32[(byte)Regs32.ptr] + this.Mem[addr + 1]:x}");
+          this.Debug?.WriteLine($"APTR  ptr <- {this.Reg32[(byte)Regs32.ptr]:X} + {this.Mem[addr + 1]:X} = {this.Reg32[(byte)Regs32.ptr] + this.Mem[addr + 1]:X}");
           this.Reg32[(byte)Regs32.ptr] += this.Mem[addr + 1];
           break;
 
@@ -157,7 +169,7 @@ namespace TomsDataOnion
             `f` to 0x01.
         */
         case Instructions.CMP:
-          this.Debug?.WriteLine($"CMP # f<-a({this.Reg8[(byte)Regs8.a]:x})==b({this.Reg8[(byte)Regs8.b]:x}) = {(this.Reg8[(byte)Regs8.a] == this.Reg8[(byte)Regs8.b] ? (byte)0 : (byte)1):x}");
+          this.Debug?.WriteLine($"CMP   f <- a({this.Reg8[(byte)Regs8.a]:X})==b({this.Reg8[(byte)Regs8.b]:X}) = {(this.Reg8[(byte)Regs8.a] == this.Reg8[(byte)Regs8.b] ? (byte)0 : (byte)1):X}");
           this.Reg8[(byte)Regs8.f] = (this.Reg8[(byte)Regs8.a] == this.Reg8[(byte)Regs8.b] ? (byte)0 : (byte)1);
           break;
 
@@ -184,7 +196,7 @@ namespace TomsDataOnion
             does nothing.
         */
         case Instructions.JEZ:
-          this.Debug?.WriteLine($"JEZ # f={this.Reg8[(byte)Regs8.f]:x} addr={this.ReadUint(addr + 1):x}");
+          this.Debug?.WriteLine($"JEZ   f={this.Reg8[(byte)Regs8.f]:X} addr={this.ReadUint(addr + 1):X}");
           if (this.Reg8[(byte)Regs8.f] == 0)
             this.Reg32[(byte)Regs32.pc] = this.ReadUint(addr + 1);
           break;
@@ -199,7 +211,7 @@ namespace TomsDataOnion
             Otherwise does nothing.
         */
         case Instructions.JNZ:
-          this.Debug?.WriteLine($"JNZ # f={this.Reg8[(byte)Regs8.f]:x} addr={this.ReadUint(addr + 1):x}");
+          this.Debug?.WriteLine($"JNZ   f={this.Reg8[(byte)Regs8.f]:X} addr={this.ReadUint(addr + 1):X}");
           if (this.Reg8[(byte)Regs8.f] != 0)
             this.Reg32[(byte)Regs32.pc] = this.ReadUint(addr + 1);
           break;
@@ -229,11 +241,11 @@ namespace TomsDataOnion
             A zero `{src}` indicates an MVI instruction, not MV.
         */
         case Instructions.MV:
-          var val = (src == 7 ? this.Mem[this.Reg32[(byte)Regs32.ptr] + this.Reg8[(byte)Regs8.c]] : this.Reg8[src - 1]);
-          this.Debug?.WriteLine($"MV # {(dest == 7 ? "(ptr+c)" : ((char)(96 + dest)).ToString())} <- {(src == 7 ? "(ptr+c)" : ((char)(96 + src)).ToString())}={val:x}");
+          var val = (src == 7 ? this.MemReg : this.Reg8[src - 1]);
+          this.Debug?.WriteLine($"MV    {(dest == 7 ? "(ptr+c)" : ((char)('a' + dest - 1)).ToString())} <- {(src == 7 ? "(ptr+c)" : ((char)('a' + src - 1)).ToString())}={val:X}");
 
           if (dest == 7)
-            this.Mem[this.Reg32[(byte)Regs32.ptr] + this.Reg8[(byte)Regs8.c]] = val;
+            this.MemReg = val;
           else
             this.Reg8[dest - 1] = val;
           break;
@@ -285,9 +297,9 @@ namespace TomsDataOnion
                                     7 => `(ptr+c)`
         */
         case Instructions.MVI:
-          this.Debug?.WriteLine($"MVI # {(dest == 7 ? "(ptr+c)" : ((char)(96 + dest)).ToString())} <- {this.Mem[addr + 1]:x}");
+          this.Debug?.WriteLine($"MVI   {(dest == 7 ? "(ptr+c)" : ((char)('a' + dest - 1)).ToString())} <- {this.Mem[addr + 1]:X}");
           if (dest == 7)
-            this.Mem[this.Reg32[(byte)Regs32.ptr] + this.Reg8[(byte)Regs8.c]] = this.Mem[addr + 1];
+            this.MemReg = this.Mem[addr + 1];
           else
             this.Reg8[dest - 1] = this.Mem[addr + 1];
           break;
@@ -325,8 +337,8 @@ namespace TomsDataOnion
             Appends the value of `a` to the output stream.
         */
         case Instructions.OUT:
-          this.Debug?.WriteLine($"OUT # {this.Reg8[(byte)Regs8.a]:x}('{(char)this.Reg8[(byte)Regs8.a]}')");
-          this.Output.WriteByte(this.Reg8[(byte)Regs8.a]);
+          this.Debug?.WriteLine($"OUT   {this.Reg8[(byte)Regs8.a]:X}('{(char)this.Reg8[(byte)Regs8.a]}')");
+          this.Output?.WriteByte(this.Reg8[(byte)Regs8.a]);
           break;
 
         /*
@@ -340,7 +352,7 @@ namespace TomsDataOnion
             added to ensure that the result is non-negative.
         */
         case Instructions.SUB:
-          this.Debug?.WriteLine($"SUB # a<-{this.Reg8[(byte)Regs8.a]:x}-{this.Reg8[(byte)Regs8.b]:x} = {(byte)(this.Reg8[(byte)Regs8.a] - this.Reg8[(byte)Regs8.b]):x}");
+          this.Debug?.WriteLine($"SUB   a <- {this.Reg8[(byte)Regs8.a]:X} - {this.Reg8[(byte)Regs8.b]:X} = {(byte)(this.Reg8[(byte)Regs8.a] - this.Reg8[(byte)Regs8.b]):X}");
           this.Reg8[(byte)Regs8.a] -= this.Reg8[(byte)Regs8.b];
           break;
 
@@ -353,7 +365,7 @@ namespace TomsDataOnion
             Sets `a` to the bitwise exclusive OR of `a` and `b`.
           */
         case Instructions.XOR:
-          this.Debug?.WriteLine($"XOR # a<-{this.Reg8[(byte)Regs8.a]:x}^{this.Reg8[(byte)Regs8.b]:x} = {(byte)(this.Reg8[(byte)Regs8.a] ^ this.Reg8[(byte)Regs8.b]):x}");
+          this.Debug?.WriteLine($"XOR   a <- {this.Reg8[(byte)Regs8.a]:X} ^ {this.Reg8[(byte)Regs8.b]:X} = {(byte)(this.Reg8[(byte)Regs8.a] ^ this.Reg8[(byte)Regs8.b]):X}");
           this.Reg8[(byte)Regs8.a] ^= this.Reg8[(byte)Regs8.b];
           break;
       }
