@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
@@ -22,6 +21,14 @@ namespace TomsDataOnion
       //var udp = new UdpPacket(bytes[20..]);
       //Console.WriteLine(udp.IsValidChecksum(ipheader.SourceIP, ipheader.DestIP));
       //Console.WriteLine(Encoding.ASCII.GetString(udp.Data));
+
+      //var helloWorld = new byte[]
+      //{
+      //  0x50, 0x48, 0xC2, 0x02, 0xA8, 0x4D, 0x00, 0x00, 0x00, 0x4F, 0x02, 0x50, 0x09, 0xC4, 0x02, 0x02, 0xE1, 0x01, 0x4F, 0x02, 0xC1, 0x22, 0x1D, 0x00, 0x00, 0x00, 0x48, 0x30, 0x02, 0x58, 0x03, 0x4F, 0x02, 0xB0, 0x29, 0x00, 0x00, 0x00, 0x48, 0x31, 0x02, 0x50, 0x0C, 0xC3, 0x02, 0xAA, 0x57, 0x48, 0x02, 0xC1, 0x21, 0x3A, 0x00, 0x00, 0x00, 0x48, 0x32, 0x02, 0x48, 0x77, 0x02, 0x48, 0x6F, 0x02, 0x48, 0x72, 0x02, 0x48, 0x6C, 0x02, 0x48, 0x64, 0x02, 0x48, 0x21, 0x02, 0x01, 0x65, 0x6F, 0x33, 0x34, 0x2C
+      //};
+
+      //var vm = new TomtelEmulator(helloWorld, Console.OpenStandardOutput());//, Console.Out);
+      //vm.Run(100000);
 
       var layer = Layer.Parse(new StreamReader(GetLayer0()));
       Console.WriteLine(layer);
@@ -44,7 +51,8 @@ namespace TomsDataOnion
       layer = layer.Peel(DecryptAes);
       Console.WriteLine(layer);
 
-      //Console.WriteLine(Encoding.ASCII.GetString(layer.PayloadAsBytes));
+      layer = layer.Peel(VirtualMachine);
+      Console.WriteLine(layer);
     }
 
     private static Stream GetLayer0()
@@ -114,8 +122,7 @@ namespace TomsDataOnion
       var sample = bytes.Take(known.Length).ToArray();
       for (int i = 0; i < known.Length; i++)
       {
-        while ((sample[i] ^ key[i]) != known[i])
-          key[i]++;
+        key[i] = (byte)(sample[i] ^ known[i]);
       }
 
       // Decrypt using key
@@ -183,6 +190,14 @@ namespace TomsDataOnion
       cipher.Init(false, new ParametersWithIV(new KeyParameter(key), iv));
 
       return cipher.DoFinal(encPayload);
+    }
+
+    private static byte[] VirtualMachine(byte[] bytes)
+    {
+      var result = new MemoryStream();
+      var vm = new TomtelEmulator(bytes, result);
+      vm.Run();
+      return result.ToArray();
     }
   }
 }

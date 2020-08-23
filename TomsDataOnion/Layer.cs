@@ -37,7 +37,7 @@ namespace TomsDataOnion
     public static Layer Parse(TextReader tr)
     {
       var s = tr.ReadLine();
-      while (s != null && !s.StartsWith("==[ Layer"))
+      while (s != null && !s.StartsWith("==[ Layer") && !s.StartsWith("==[ The Core ]"))
       {
         s = tr.ReadLine();
       }
